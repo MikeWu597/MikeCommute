@@ -94,7 +94,7 @@
             countdownDiv.style.display = 'none';
             
             try {
-                const response = await fetch('/mtr/next-train');
+                const response = await fetch('/mtr/next-train-to-hh');
                 const data = await response.json();
                 
                 if (data.status === 'success') {
