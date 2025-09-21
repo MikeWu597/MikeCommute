@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const apiRoutes = require('./utils/api');
 const mtrRoutes = require('./utils/mtr');
+const crRoutes = require('./utils/cr');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,6 +16,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // API routes
 app.use('/api', apiRoutes);
 app.use('/mtr', mtrRoutes);
+app.use('/cr', crRoutes);
 
 // Basic route for testing
 app.get('/', (req, res) => {

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>High-Speed Train Schedule</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            text-align: center;
+            margin-top: 50px;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #e6f7ff; /* Light blue background */
+        }
+        .error {
+            background-color: #ffeaea;
+            color: #d8000c;
+        }
+        .success {
+            background-color: #e6f7ff;
+            color: #000;
+        }
+        .loading {
+            color: #0066cc;
+        }
+        .train-number {
+            font-size: 36px;
+            font-weight: bold;
+            color: #0066cc;
+            margin: 10px 0;
+        }
+        .departure-time {
+            font-size: 36px;
+            font-weight: bold;
+            color: #0066cc;
+            margin: 10px 0;
+        }
+        .arrival-time, .duration {
+            font-size: 18px;
+            color: #666;
+            margin: 5px 0;
+        }
+        .countdown {
+            font-size: 48px;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+        /* Color classes for countdown */
+        .countdown-blue {
+            color: #0066cc;
+        }
+        .countdown-yellow {
+            color: #ffcc00;
+        }
+        .countdown-red {
+            color: #cc0000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>To Hong Kong</h1>
+        
+        <div id="result" class="result" style="display: none;"></div>
+        <div id="countdown" class="countdown" style="display: none;"></div>
+    </div>
+
+    <script>
+        let countdownInterval;
+        let departureTime = null;
+        
+        // Automatically load train info on page load
+        window.addEventListener('load', getNextTrain);
+        
+        async function getNextTrain() {
+            // Clear existing countdown
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+            
+            const resultDiv = document.getElementById('result');
+            const countdownDiv = document.getElementById('countdown');
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result loading';
+            resultDiv.innerHTML = '<p>Loading...</p>';
+            countdownDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/cr/next-train-to-hk');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <div class="train-number">${data.data.trainName}</div>
+                        <div class="departure-time">${data.data.departureTime}</div>
+                        <div class="arrival-time">Arrival: ${data.data.arrivalTime}</div>
+                        <div class="duration">Duration: ${data.data.duration}</div>
+                    `;
+                    
+                    // Set departure time for countdown
+                    const today = new Date();
+                    const [hours, minutes] = data.data.departureTime.split(':');
+                    const departure = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes);
+                    departureTime = departure.getTime();
+                    
+                    // Show countdown
+                    countdownDiv.style.display = 'block';
+                    updateCountdown(); // Show immediately
+                    
+                    // Update countdown every second
+                    countdownInterval = setInterval(updateCountdown, 1000);
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `<p>Error: ${data.message}</p>`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+        
+        function updateCountdown() {
+            if (departureTime === null) return;
+            
+            const countdownDiv = document.getElementById('countdown');
+            const currentTime = new Date().getTime();
+            const timeDiffSeconds = Math.floor((departureTime - currentTime) / 1000);
+            
+            if (timeDiffSeconds > 0) {
+                // Format as xmxxs
+                const minutes = Math.floor(timeDiffSeconds / 60);
+                const seconds = timeDiffSeconds % 60;
+                countdownDiv.innerHTML = `${minutes}m${seconds.toString().padStart(2, '0')}s`;
+                
+                // Apply color based on time remaining
+                countdownDiv.className = 'countdown';
+                if (timeDiffSeconds > 120) {
+                    countdownDiv.classList.add('countdown-blue');
+                } else if (timeDiffSeconds > 60) {
+                    countdownDiv.classList.add('countdown-yellow');
+                } else {
+                    countdownDiv.classList.add('countdown-red');
+                }
+            } else {
+                // Show "Arrived" instead of 0m00s
+                countdownDiv.innerHTML = 'Arrived';
+                countdownDiv.className = 'countdown countdown-red';
+                // Clear countdown
+                if (countdownInterval) {
+                    clearInterval(countdownInterval);
+                    countdownInterval = null;
+                }
+            }
+        }
+        
+        // Clean up timer when page is closed
+        window.addEventListener('beforeunload', () => {
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+            }
+        });
+    </script>
+</body>
+</html>
