@@ -32,43 +32,60 @@
             margin-top: 20px;
             padding: 15px;
             border-radius: 5px;
-            background-color: #f2f2f2;
+            background-color: #e6f7ff; /* Changed to light blue */
         }
         .error {
             background-color: #ffeaea;
             color: #d8000c;
         }
         .success {
-            background-color: #eaffea;
-            color: #2a662a;
+            background-color: #e6f7ff; /* Changed to light blue */
+            color: #000;
         }
         .loading {
             color: #0066cc;
         }
         .countdown {
-            font-size: 24px;
+            font-size: 48px; /* Increased font size */
             font-weight: bold;
-            color: #ff6600;
+            margin-top: 20px;
+        }
+        /* Color classes for countdown */
+        .countdown-blue {
+            color: #0066cc;
+        }
+        .countdown-yellow {
+            color: #ffcc00;
+        }
+        .countdown-red {
+            color: #cc0000;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>MTR Train Schedule</h1>
-        <p>Get the next train from Austin to Hung Hom</p>
+        <h1>To Hung Hom</h1> <!-- Changed title -->
         
-        <button onclick="startPolling()">Start Train Info Polling</button>
+        <!-- Removed button -->
         
         <div id="result" class="result" style="display: none;"></div>
         <div id="countdown" class="countdown" style="display: none;"></div>
     </div>
 
     <script>
-        let pollingInterval;
-        let timeDataPoints = [];
-        let fittedDepartureTime = null;
+        let countdownInterval;
+        let departureTime = null;
+        
+        // Automatically load train info on page load
+        window.addEventListener('load', getNextTrain);
         
         async function getNextTrain() {
+            // 清除现有的倒计时
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+            
             const resultDiv = document.getElementById('result');
             const countdownDiv = document.getElementById('countdown');
             resultDiv.style.display = 'block';
@@ -82,33 +99,21 @@
                 
                 if (data.status === 'success') {
                     resultDiv.className = 'result success';
+                    // Simplified display format
                     resultDiv.innerHTML = `
-                        <h3>Next Train Information</h3>
-                        <p><strong>Departure from Austin:</strong> ${data.data.departAustin}</p>
-                        <p><strong>Arrival at Hung Hom:</strong> ${data.data.actualArrivalAtHungHom}</p>
-                        <p><strong>Time until departure:</strong> ${data.data.timeUntilDeparture} seconds</p>
+                        <p>${formatTime(data.data.departAustin)} - ${formatTime(data.data.actualArrivalAtHungHom)}</p>
                     `;
                     
-                    // Store data point for curve fitting
-                    const currentTime = new Date().getTime();
-                    timeDataPoints.push({
-                        x: currentTime,
-                        y: data.data.timeUntilDeparture
-                    });
+                    // 设置发车时间用于倒计时
+                    const departure = new Date(data.data.departAustin);
+                    departureTime = departure.getTime();
                     
-                    // Keep only the last 10 data points
-                    if (timeDataPoints.length > 10) {
-                        timeDataPoints.shift();
-                    }
+                    // 显示倒计时
+                    countdownDiv.style.display = 'block';
+                    updateCountdown(); // 立即显示一次
                     
-                    // Perform linear regression if we have at least 2 points
-                    if (timeDataPoints.length >= 2) {
-                        fittedDepartureTime = linearRegression(timeDataPoints);
-                        countdownDiv.style.display = 'block';
-                    }
-                    
-                    // Update countdown display
-                    updateCountdown();
+                    // 每秒更新倒计时
+                    countdownInterval = setInterval(updateCountdown, 1000);
                 } else {
                     resultDiv.className = 'result error';
                     resultDiv.innerHTML = `<p>Error: ${data.message}</p>`;
@@ -119,65 +124,55 @@
             }
         }
         
-        // Linear regression to find when y=0
-        function linearRegression(points) {
-            let sumX = 0;
-            let sumY = 0;
-            let sumXY = 0;
-            let sumXX = 0;
-            const n = points.length;
-            
-            for (const point of points) {
-                sumX += point.x;
-                sumY += point.y;
-                sumXY += point.x * point.y;
-                sumXX += point.x * point.x;
-            }
-            
-            // Calculate slope and intercept
-            const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-            const intercept = (sumY - slope * sumX) / n;
-            
-            // Find x when y=0: x = -intercept/slope
-            if (slope !== 0) {
-                return -intercept / slope;
-            }
-            
-            return null;
+        // Helper function to format time as HH:MM:SS
+        function formatTime(dateTimeString) {
+            const date = new Date(dateTimeString);
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            const seconds = date.getSeconds().toString().padStart(2, '0');
+            return `${hours}:${minutes}:${seconds}`;
         }
         
         function updateCountdown() {
-            if (!fittedDepartureTime) return;
+            if (departureTime === null) return;
             
             const countdownDiv = document.getElementById('countdown');
-            const currentTime = new Date().getTime();
-            const timeDiffSeconds = Math.floor((fittedDepartureTime - currentTime) / 1000);
+            const currentTime = new Date().getTime(); // 使用浏览器本地时钟
+            const timeDiffSeconds = Math.floor((departureTime - currentTime) / 1000) - 30; // Adjust countdown by 30 seconds
             
             if (timeDiffSeconds > 0) {
-                countdownDiv.innerHTML = `Time until departure: ${timeDiffSeconds} seconds`;
+                // Format as xmxxs
+                const minutes = Math.floor(timeDiffSeconds / 60);
+                const seconds = timeDiffSeconds % 60;
+                countdownDiv.innerHTML = `${minutes}m${seconds.toString().padStart(2, '0')}s`;
+                
+                // Apply color based on time remaining
+                countdownDiv.className = 'countdown';
+                if (timeDiffSeconds > 120) {
+                    countdownDiv.classList.add('countdown-blue');
+                } else if (timeDiffSeconds > 60) {
+                    countdownDiv.classList.add('countdown-yellow');
+                } else {
+                    countdownDiv.classList.add('countdown-red');
+                }
             } else {
-                countdownDiv.innerHTML = 'Train has departed!';
+                // 显示 "Arrived" 而不是 0m00s
+                countdownDiv.innerHTML = 'Arrived';
+                countdownDiv.className = 'countdown countdown-red';
+                // 清除倒计时
+                if (countdownInterval) {
+                    clearInterval(countdownInterval);
+                    countdownInterval = null;
+                }
             }
         }
         
-        function startPolling() {
-            stopPolling(); // Clear any existing interval
-            pollingInterval = setInterval(() => {
-                getNextTrain();
-                updateCountdown();
-            }, 10000); // Poll every 10 seconds
-            getNextTrain(); // Immediate fetch
-        }
-        
-        function stopPolling() {
-            if (pollingInterval) {
-                clearInterval(pollingInterval);
-                pollingInterval = null;
+        // 页面关闭时清理定时器
+        window.addEventListener('beforeunload', () => {
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
             }
-        }
-        
-        // Clean up interval when page is closed
-        window.addEventListener('beforeunload', stopPolling);
+        });
     </script>
 </body>
 </html>
