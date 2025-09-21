@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTR Train Schedule</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            text-align: center;
+            margin-top: 50px;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #f2f2f2;
+        }
+        .error {
+            background-color: #ffeaea;
+            color: #d8000c;
+        }
+        .success {
+            background-color: #eaffea;
+            color: #2a662a;
+        }
+        .loading {
+            color: #0066cc;
+        }
+        .countdown {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ff6600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MTR Train Schedule</h1>
+        <p>Get the next train from Austin to Hung Hom</p>
+        
+        <button onclick="startPolling()">Start Train Info Polling</button>
+        
+        <div id="result" class="result" style="display: none;"></div>
+        <div id="countdown" class="countdown" style="display: none;"></div>
+    </div>
+
+    <script>
+        let pollingInterval;
+        let timeDataPoints = [];
+        let fittedDepartureTime = null;
+        
+        async function getNextTrain() {
+            const resultDiv = document.getElementById('result');
+            const countdownDiv = document.getElementById('countdown');
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result loading';
+            resultDiv.innerHTML = '<p>Loading...</p>';
+            countdownDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/mtr/next-train');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h3>Next Train Information</h3>
+                        <p><strong>Departure from Austin:</strong> ${data.data.departAustin}</p>
+                        <p><strong>Arrival at Hung Hom:</strong> ${data.data.actualArrivalAtHungHom}</p>
+                        <p><strong>Time until departure:</strong> ${data.data.timeUntilDeparture} seconds</p>
+                    `;
+                    
+                    // Store data point for curve fitting
+                    const currentTime = new Date().getTime();
+                    timeDataPoints.push({
+                        x: currentTime,
+                        y: data.data.timeUntilDeparture
+                    });
+                    
+                    // Keep only the last 10 data points
+                    if (timeDataPoints.length > 10) {
+                        timeDataPoints.shift();
+                    }
+                    
+                    // Perform linear regression if we have at least 2 points
+                    if (timeDataPoints.length >= 2) {
+                        fittedDepartureTime = linearRegression(timeDataPoints);
+                        countdownDiv.style.display = 'block';
+                    }
+                    
+                    // Update countdown display
+                    updateCountdown();
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `<p>Error: ${data.message}</p>`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+        
+        // Linear regression to find when y=0
+        function linearRegression(points) {
+            let sumX = 0;
+            let sumY = 0;
+            let sumXY = 0;
+            let sumXX = 0;
+            const n = points.length;
+            
+            for (const point of points) {
+                sumX += point.x;
+                sumY += point.y;
+                sumXY += point.x * point.y;
+                sumXX += point.x * point.x;
+            }
+            
+            // Calculate slope and intercept
+            const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+            const intercept = (sumY - slope * sumX) / n;
+            
+            // Find x when y=0: x = -intercept/slope
+            if (slope !== 0) {
+                return -intercept / slope;
+            }
+            
+            return null;
+        }
+        
+        function updateCountdown() {
+            if (!fittedDepartureTime) return;
+            
+            const countdownDiv = document.getElementById('countdown');
+            const currentTime = new Date().getTime();
+            const timeDiffSeconds = Math.floor((fittedDepartureTime - currentTime) / 1000);
+            
+            if (timeDiffSeconds > 0) {
+                countdownDiv.innerHTML = `Time until departure: ${timeDiffSeconds} seconds`;
+            } else {
+                countdownDiv.innerHTML = 'Train has departed!';
+            }
+        }
+        
+        function startPolling() {
+            stopPolling(); // Clear any existing interval
+            pollingInterval = setInterval(() => {
+                getNextTrain();
+                updateCountdown();
+            }, 10000); // Poll every 10 seconds
+            getNextTrain(); // Immediate fetch
+        }
+        
+        function stopPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+        }
+        
+        // Clean up interval when page is closed
+        window.addEventListener('beforeunload', stopPolling);
+    </script>
+</body>
+</html>
